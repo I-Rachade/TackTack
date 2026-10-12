@@ -35,6 +35,8 @@ export function createApp({ apiKey, model, eulerApiKey, classifierClient, demoIn
     apiKey,
     model,
     client: classifierClient,
+    getCatalog: () => store.catalogForAi(),
+    getCustomers: (users) => store.customersForAi(users),
     onResult: (r) => {
       const comment = pending.get(r.id);
       pending.delete(r.id);
@@ -64,15 +66,15 @@ export function createApp({ apiKey, model, eulerApiKey, classifierClient, demoIn
   });
 
   app.post("/api/live", async (req, res) => {
-    const { mode, username, catalog } = req.body ?? {};
+    const { mode, username } = req.body ?? {};
     if (mode !== "demo" && !username?.trim()) return res.status(400).json({ error: "Nom d'utilisateur TikTok manquant." });
 
     stopSource();
     pending.clear();
+    classifier.reset();
     store.startLive();
     stats.comments = 0;
     refreshStats();
-    classifier.setCatalog(catalog?.trim() ? catalog : store.catalogText());
     source = mode === "demo" ? new DemoSource({ intervalMs: demoIntervalMs }) : new TikTokSource(username, { eulerApiKey });
     source.on("comment", (c) => {
       stats.comments += 1;
@@ -101,6 +103,18 @@ export function createApp({ apiKey, model, eulerApiKey, classifierClient, demoIn
     res.json({ ok: true });
   });
 
+  // --- Shop settings ------------------------------------------------------
+
+  app.get("/api/settings", (req, res) => res.json(store.getSettings()));
+
+  app.put("/api/settings", (req, res) => {
+    try {
+      res.json(store.updateSettings(req.body ?? {}));
+    } catch (err) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
   // --- Products (prepared before the live) ---------------------------------
 
   const fail = (res, err) => res.status(400).json({ error: err.message });
@@ -110,7 +124,6 @@ export function createApp({ apiKey, model, eulerApiKey, classifierClient, demoIn
   app.post("/api/products", (req, res) => {
     try {
       const product = store.addProduct(req.body ?? {});
-      if (source) classifier.setCatalog(store.catalogText());
       res.status(201).json(product);
     } catch (err) {
       fail(res, err);
@@ -121,7 +134,6 @@ export function createApp({ apiKey, model, eulerApiKey, classifierClient, demoIn
     try {
       const product = store.updateProduct(req.params.id, req.body ?? {});
       if (!product) return res.status(404).json({ error: "Produit introuvable." });
-      if (source) classifier.setCatalog(store.catalogText());
       res.json(product);
     } catch (err) {
       fail(res, err);
@@ -130,7 +142,6 @@ export function createApp({ apiKey, model, eulerApiKey, classifierClient, demoIn
 
   app.delete("/api/products/:id", (req, res) => {
     if (!store.deleteProduct(req.params.id)) return res.status(404).json({ error: "Produit introuvable." });
-    if (source) classifier.setCatalog(store.catalogText());
     res.json({ ok: true });
   });
 

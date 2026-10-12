@@ -1,3 +1,5 @@
+import { cfa, liveReply, whatsappMessage, waLink } from "./messages.js";
+
 const $ = (id) => document.getElementById(id);
 
 const LABELS = {
@@ -5,6 +7,7 @@ const LABELS = {
   question_prix: "Demande le prix",
   question_produit: "Question produit",
   question_livraison: "Livraison / paiement",
+  annulation: "Annule",
 };
 
 const STATUS_LABELS = {
@@ -13,8 +16,6 @@ const STATUS_LABELS = {
   paye: "Payé",
   annule: "Annulé",
 };
-
-const cfa = (n) => `${Math.round(n).toLocaleString("fr-FR").replace(/\s/g, " ")} F`;
 
 function el(tag, className, text) {
   const node = document.createElement(tag);
@@ -162,6 +163,49 @@ $("product-form").addEventListener("submit", async (e) => {
 });
 $("product-cancel").addEventListener("click", resetProductForm);
 
+// --- WhatsApp and payment settings ---------------------------------------
+
+let settings = {};
+const SETTING_FIELDS = { shopName: "shop-name", whatsapp: "shop-whatsapp", flooz: "shop-flooz", tmoney: "shop-tmoney" };
+
+async function loadSettings() {
+  settings = await api("GET", "/api/settings");
+  for (const [key, id] of Object.entries(SETTING_FIELDS)) $(id).value = settings[key] ?? "";
+}
+
+$("settings-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const body = Object.fromEntries(Object.entries(SETTING_FIELDS).map(([key, id]) => [key, $(id).value]));
+  try {
+    settings = await api("PUT", "/api/settings", body);
+    $("settings-status").textContent = "Enregistré.";
+    $("settings-status").classList.remove("error");
+    await loadLeads();
+  } catch (err) {
+    $("settings-status").textContent = err.message;
+    $("settings-status").classList.add("error");
+  }
+});
+
+async function copy(text, button) {
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch {
+    prompt("Copie ce texte :", text);
+    return;
+  }
+  const label = button.textContent;
+  button.textContent = "Copié ✓";
+  setTimeout(() => (button.textContent = label), 1500);
+}
+
+function actionButton(label, onClick) {
+  const b = el("button", "secondary small", label);
+  b.type = "button";
+  b.addEventListener("click", () => onClick(b));
+  return b;
+}
+
 // --- Leads ----------------------------------------------------------------
 
 const leads = new Map(); // id -> li
@@ -191,12 +235,37 @@ function leadItem(lead) {
   head.append(select);
   li.append(head);
 
-  const order = [lead.product, lead.quantity ? `× ${lead.quantity}` : null, lead.total != null ? `= ${cfa(lead.total)}` : null]
-    .filter(Boolean)
-    .join(" ");
-  if (order) li.append(el("div", "order", order));
+  head.prepend(el("span", "code", lead.code));
+  if (lead.items.length) {
+    const order = el("div", "order");
+    order.textContent = lead.items.map((i) => `${i.quantity} × ${i.name}${i.variant ? ` (${i.variant})` : ""}`).join(", ");
+    if (lead.total != null) order.append(` = ${cfa(lead.total)}`);
+    li.append(order);
+  }
   const last = lead.comments.at(-1);
   if (last) li.append(el("div", "detail", `« ${last.text} »${lead.comments.length > 1 ? ` (+${lead.comments.length - 1})` : ""}`));
+
+  const reply = liveReply(lead, settings);
+  if (reply) {
+    const box = el("div", "reply");
+    box.append(el("span", "reply-label", "À répondre dans le live"), el("div", null, reply));
+    li.append(box);
+  }
+  const actions = el("div", "lead-actions");
+  if (reply) actions.append(actionButton("Copier la réponse", (b) => copy(reply, b)));
+  if (lead.items.length && lead.status !== "annule") {
+    const message = whatsappMessage(lead, settings);
+    actions.append(actionButton("Copier le message WhatsApp", (b) => copy(message, b)));
+    const link = lead.phone && waLink(lead.phone, message);
+    if (link) {
+      const a = el("a", "button small", `WhatsApp ${lead.phone}`);
+      a.href = link;
+      a.target = "_blank";
+      a.rel = "noopener";
+      actions.append(a);
+    }
+  }
+  if (actions.childElementCount) li.append(actions);
   return li;
 }
 
@@ -305,4 +374,4 @@ $("stop").addEventListener("click", async () => {
 });
 
 loadProducts();
-loadLeads();
+loadSettings().then(loadLeads);

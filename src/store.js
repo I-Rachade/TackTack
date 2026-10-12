@@ -21,15 +21,22 @@ function guessQuantity(text, productName) {
   return null;
 }
 
+const EMPTY_SETTINGS = { shopName: "", whatsapp: "", flooz: "", tmoney: "" };
+
 export const formatCfa = (n) => `${Math.round(n).toLocaleString("fr-FR").replace(/ | /g, " ")} F`;
 
-// Phase 2: one seller, data kept in a JSON file. Multi-seller storage comes with step 4.
+// One seller, data kept in a JSON file. Multi-seller storage comes with step 4.
 export class Store {
   constructor({ file } = {}) {
     this.file = file ?? null;
-    this.data = { products: [], leads: [], liveId: null };
+    this.data = { products: [], leads: [], liveId: null, settings: { ...EMPTY_SETTINGS } };
     if (this.file && fs.existsSync(this.file)) {
       this.data = { ...this.data, ...JSON.parse(fs.readFileSync(this.file, "utf8")) };
+      // Leads saved before carts existed had a single product.
+      for (const l of this.data.leads) {
+        l.items ??= l.product ? [{ productId: l.productId ?? null, name: l.product, variant: null, quantity: l.quantity ?? 1, unitPrice: l.unitPrice ?? null }] : [];
+        l.code ??= `TT${Math.floor(1000 + Math.random() * 9000)}`;
+      }
     }
   }
 
@@ -39,6 +46,25 @@ export class Store {
     const tmp = `${this.file}.tmp`;
     fs.writeFileSync(tmp, JSON.stringify(this.data, null, 2));
     fs.renameSync(tmp, this.file);
+  }
+
+  // --- Shop settings (WhatsApp and payment numbers) -------------------------
+
+  getSettings() {
+    return { ...EMPTY_SETTINGS, ...this.data.settings };
+  }
+
+  updateSettings(input) {
+    const settings = this.getSettings();
+    for (const key of Object.keys(EMPTY_SETTINGS)) {
+      if (!(key in input)) continue;
+      const value = String(input[key] ?? "").trim().slice(0, 80);
+      if (key !== "shopName" && value && !/^\+?[\d\s.-]{8,20}$/.test(value)) throw new Error("Numéro de téléphone invalide.");
+      settings[key] = value;
+    }
+    this.data.settings = settings;
+    this.save();
+    return settings;
   }
 
   // --- Products -----------------------------------------------------------
@@ -94,12 +120,26 @@ export class Store {
     return this.data.products.length < before;
   }
 
-  // The "Produits du jour" text given to the AI.
-  catalogText() {
+  // Quantity already promised to customers of the current live.
+  reserved(productId) {
+    let n = 0;
+    for (const l of this.listLeads()) {
+      if (l.status === "annule") continue;
+      for (const item of l.items) if (item.productId === productId) n += item.quantity;
+    }
+    return n;
+  }
+
+  // The "Produits du jour" given to the AI, with what is left in stock.
+  catalogForAi() {
     return this.data.products
       .filter((p) => p.active)
-      .map((p) => `${p.name} - ${formatCfa(p.price)}${p.stock != null ? ` (stock : ${p.stock})` : ""}`)
-      .join("\n");
+      .map((p) => ({
+        id: p.id,
+        nom: p.name,
+        prix: p.price,
+        ...(p.stock != null ? { stock_restant: Math.max(0, p.stock - this.reserved(p.id)) } : {}),
+      }));
   }
 
   // Finds the product a comment refers to from the AI's (or seller's) wording.
@@ -132,6 +172,44 @@ export class Store {
     return this.data.leads.filter((l) => l.liveId === this.data.liveId);
   }
 
+  // Short code the customer sends on WhatsApp so the seller finds the order.
+  newCode() {
+    const used = new Set(this.listLeads().map((l) => l.code));
+    let code;
+    do code = `TT${Math.floor(1000 + Math.random() * 9000)}`;
+    while (used.has(code));
+    return code;
+  }
+
+  // What the AI needs to know about these customers before reading their new comments.
+  customersForAi(users) {
+    return users.map((user) => {
+      const lead = this.listLeads().find((l) => l.user === user);
+      return {
+        auteur: user,
+        panier: (lead?.items ?? []).map((i) => ({ product_id: i.productId, produit: i.name, quantite: i.quantity, variante: i.variant })),
+        commande_annulee: lead?.status === "annule",
+        derniers_commentaires: (lead?.comments ?? []).slice(-5).map((c) => c.text),
+      };
+    });
+  }
+
+  // Turns the AI's cart into order lines with the seller's prices.
+  toItems(cart) {
+    const items = [];
+    for (const line of cart) {
+      const product = this.data.products.find((p) => p.id === line.product_id && p.active) ?? this.matchProduct(line.product);
+      const quantity = Number.isInteger(line.quantity) && line.quantity > 0 ? Math.min(line.quantity, 999) : 1;
+      const variant = line.variant?.trim() || null;
+      const name = product?.name ?? String(line.product ?? "").trim().slice(0, 120);
+      if (!name) continue;
+      const same = items.find((i) => i.name === name && i.variant === variant);
+      if (same) same.quantity += quantity;
+      else items.push({ productId: product?.id ?? null, name, variant, quantity, unitPrice: product?.price ?? null });
+    }
+    return items;
+  }
+
   // One lead per customer and live; each new buying comment updates it.
   recordIntent(comment, result) {
     const liveId = this.data.liveId;
@@ -140,14 +218,14 @@ export class Store {
       lead = {
         id: randomUUID(),
         liveId,
+        code: this.newCode(),
         user: comment.user,
         nickname: comment.nickname ?? comment.user,
         intent: result.intent,
-        productId: null,
-        product: null,
-        quantity: null,
-        unitPrice: null,
+        items: [],
         total: null,
+        phone: null,
+        reply: null,
         status: "nouveau",
         comments: [],
         firstAt: comment.at ?? Date.now(),
@@ -155,22 +233,30 @@ export class Store {
       this.data.leads.push(lead);
     }
     // A purchase outranks a question; never downgrade a lead that already wants to buy.
-    if (result.intent === "achat" || lead.intent !== "achat") lead.intent = result.intent;
+    if (["achat", "annulation"].includes(result.intent) || !["achat", "annulation"].includes(lead.intent)) lead.intent = result.intent;
     lead.comments.push({ text: comment.text, intent: result.intent, at: comment.at ?? Date.now() });
     lead.lastAt = comment.at ?? Date.now();
+    if (result.phone) lead.phone = result.phone;
+    lead.reply = result.reply?.trim() || null;
 
-    // Without the AI (keyword mode) no product is extracted, so look for it in the comment itself.
-    const product = this.matchProduct(result.product ?? comment.text);
-    if (product) {
-      lead.productId = product.id;
-      lead.product = product.name;
-      lead.unitPrice = product.price;
-    } else if (result.product && !lead.product) {
-      lead.product = result.product;
+    if (result.cart) {
+      lead.items = this.toItems(result.cart);
+    } else if (result.intent === "achat") {
+      // Keyword mode: no cart from the AI, so look for the product in the comment itself.
+      const product = this.matchProduct(comment.text);
+      if (product) {
+        const quantity = guessQuantity(comment.text, product.name);
+        const item = lead.items.find((i) => i.productId === product.id);
+        if (item) item.quantity = quantity ?? item.quantity;
+        else lead.items.push({ productId: product.id, name: product.name, variant: null, quantity: quantity ?? 1, unitPrice: product.price });
+      }
     }
-    const quantity = result.quantity ?? (product && !result.product ? guessQuantity(comment.text, product.name) : null);
-    if (quantity) lead.quantity = quantity;
-    lead.total = lead.unitPrice != null ? lead.unitPrice * (lead.quantity ?? 1) : null;
+
+    if (result.intent === "annulation" && lead.status !== "paye") lead.status = "annule";
+    else if (result.intent === "achat" && lead.status === "annule") lead.status = "nouveau";
+
+    const priced = lead.items.filter((i) => i.unitPrice != null);
+    lead.total = priced.length ? priced.reduce((sum, i) => sum + i.unitPrice * i.quantity, 0) : null;
     this.save();
     return lead;
   }

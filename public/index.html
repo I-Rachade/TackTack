@@ -56,6 +56,31 @@
 
   <main id="tab-products" hidden>
     <section class="card">
+      <h2>WhatsApp et paiement</h2>
+      <p class="hint">L'IA donne ton numéro WhatsApp aux acheteurs et prépare le message de paiement avec tes numéros Flooz et T-Money.</p>
+      <form id="settings-form">
+        <label>Nom de la boutique
+          <input id="shop-name" placeholder="Boutique Ama" maxlength="80">
+        </label>
+        <div class="row fields">
+          <label>WhatsApp
+            <input id="shop-whatsapp" type="tel" placeholder="90 00 00 00">
+          </label>
+          <label>Flooz
+            <input id="shop-flooz" type="tel" placeholder="99 00 00 00">
+          </label>
+          <label>T-Money
+            <input id="shop-tmoney" type="tel" placeholder="90 00 00 00">
+          </label>
+        </div>
+        <div class="row">
+          <button type="submit">Enregistrer</button>
+        </div>
+        <p id="settings-status" class="status"></p>
+      </form>
+    </section>
+
+    <section class="card">
       <h2 id="product-form-title">Ajouter un produit</h2>
       <p class="hint">Ce que tu vends aujourd'hui. L'IA s'en sert pour reconnaître l'article et le prix dans les commentaires.</p>
       <form id="product-form">
@@ -86,6 +111,6 @@
     </section>
   </main>
 
-  <script src="app.js"></script>
+  <script type="module" src="app.js"></script>
 </body>
 </html>
