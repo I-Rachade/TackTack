@@ -13,6 +13,13 @@ if errorlevel 1 (
 
 if not exist .env copy .env.example .env >nul
 
+rem Fertige Version (dist\tacktack.mjs) braucht kein npm.
+if exist dist\tacktack.mjs (
+  set ENTRY=dist\tacktack.mjs
+  goto run
+)
+set ENTRY=src\index.js
+
 if not exist node_modules (
   echo Installiere TackTack, das dauert beim ersten Mal ein bis zwei Minuten...
   call npm install --no-audit --no-fund
@@ -23,10 +30,12 @@ if not exist node_modules (
   )
 )
 
+
+:run
 echo.
 echo TackTack laeuft auf http://localhost:3000
 echo Zum Beenden dieses Fenster schliessen.
 echo.
 start "" http://localhost:3000
-node --env-file-if-exists=.env src/index.js
+node --env-file-if-exists=.env %ENTRY%
 pause
