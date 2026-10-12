@@ -17,7 +17,7 @@ if not exist node_modules (
   echo Installiere TackTack, das dauert beim ersten Mal ein bis zwei Minuten...
   call npm install --no-audit --no-fund
   if errorlevel 1 (
-    echo Installation fehlgeschlagen. Bitte Internetverbindung pruefen.
+    echo Installation fehlgeschlagen, siehe Meldung oben.
     pause
     exit /b 1
   )
@@ -28,5 +28,5 @@ echo TackTack laeuft auf http://localhost:3000
 echo Zum Beenden dieses Fenster schliessen.
 echo.
 start "" http://localhost:3000
-call npm start
+node --env-file-if-exists=.env src/index.js
 pause
