@@ -21,6 +21,10 @@ Ohne `ANTHROPIC_API_KEY` läuft TackTack mit einer einfachen Erkennung über Sch
 
 ## Starten
 
+**Windows:** Doppelklick auf `start-windows.bat`. Beim ersten Start installiert sie alles Nötige und öffnet danach den Browser. Voraussetzung ist Node.js (LTS) von https://nodejs.org.
+
+**Kommandozeile:**
+
 Voraussetzung: Node.js 22 oder neuer.
 
 ```bash
