@@ -2,9 +2,9 @@ import fs from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 
-export const LEAD_STATUSES = ["nouveau", "contacte", "paye", "annule"];
+export const LEAD_STATUSES = ["nouveau", "contacte", "paye", "livre", "annule"];
 
-const normalize = (s) =>
+export const normalize = (s) =>
   (s ?? "")
     .toLowerCase()
     .normalize("NFD")
@@ -21,7 +21,19 @@ function guessQuantity(text, productName) {
   return null;
 }
 
-const EMPTY_SETTINGS = { shopName: "", whatsapp: "", flooz: "", tmoney: "" };
+const EMPTY_SETTINGS = { shopName: "", whatsapp: "", flooz: "", tmoney: "", zones: "" };
+
+// "Bè = 1000" per line -> [{ name: "Bè", fee: 1000 }]
+export function parseZones(text) {
+  const zones = [];
+  for (const line of String(text ?? "").split("\n")) {
+    if (!line.trim()) continue;
+    const m = line.match(/^\s*(.+?)\s*[=:]\s*(\d[\d\s]*)\s*F?\s*$/i);
+    if (!m) throw new Error(`Zone de livraison invalide : « ${line.trim()} ». Écris par exemple « Bè = 1000 ».`);
+    zones.push({ name: m[1].slice(0, 60), fee: Number(m[2].replace(/\s/g, "")) });
+  }
+  return zones;
+}
 
 export const formatCfa = (n) => `${Math.round(n).toLocaleString("fr-FR").replace(/ | /g, " ")} F`;
 
@@ -58,13 +70,18 @@ export class Store {
     const settings = this.getSettings();
     for (const key of Object.keys(EMPTY_SETTINGS)) {
       if (!(key in input)) continue;
-      const value = String(input[key] ?? "").trim().slice(0, 80);
-      if (key !== "shopName" && value && !/^\+?[\d\s.-]{8,20}$/.test(value)) throw new Error("Numéro de téléphone invalide.");
+      const value = String(input[key] ?? "").trim().slice(0, key === "zones" ? 2000 : 80);
+      if (key === "zones") parseZones(value);
+      else if (key !== "shopName" && value && !/^\+?[\d\s.-]{8,20}$/.test(value)) throw new Error("Numéro de téléphone invalide.");
       settings[key] = value;
     }
     this.data.settings = settings;
     this.save();
     return settings;
+  }
+
+  deliveryZones() {
+    return parseZones(this.getSettings().zones);
   }
 
   // --- Products -----------------------------------------------------------
@@ -255,10 +272,85 @@ export class Store {
     if (result.intent === "annulation" && lead.status !== "paye") lead.status = "annule";
     else if (result.intent === "achat" && lead.status === "annule") lead.status = "nouveau";
 
-    const priced = lead.items.filter((i) => i.unitPrice != null);
-    lead.total = priced.length ? priced.reduce((sum, i) => sum + i.unitPrice * i.quantity, 0) : null;
+    this.recalc(lead);
     this.save();
     return lead;
+  }
+
+  recalc(lead) {
+    const priced = lead.items.filter((i) => i.unitPrice != null);
+    lead.total = priced.length ? priced.reduce((sum, i) => sum + i.unitPrice * i.quantity, 0) : null;
+    lead.amountDue = lead.total != null ? lead.total + (lead.delivery?.fee ?? 0) : null;
+  }
+
+  // --- After the live: WhatsApp, payment and delivery ------------------------
+
+  findLead(id) {
+    return this.data.leads.find((l) => l.id === id) ?? null;
+  }
+
+  // The newest order with this code (codes are unique within one live).
+  findLeadByCode(text) {
+    const code = String(text ?? "").toUpperCase().match(/\bTT\s?-?(\d{4})\b/)?.[1];
+    if (!code) return null;
+    return this.data.leads.findLast((l) => l.code === `TT${code}`) ?? null;
+  }
+
+  // The newest open order of a WhatsApp number.
+  findLeadByWhatsapp(waId) {
+    const mine = this.data.leads.filter((l) => l.waId === waId);
+    return mine.findLast((l) => !["livre", "annule"].includes(l.status)) ?? mine.at(-1) ?? null;
+  }
+
+  addChat(lead, from, text) {
+    lead.chat ??= [];
+    lead.chat.push({ from, text, at: Date.now() });
+    lead.chat = lead.chat.slice(-100);
+    this.save();
+  }
+
+  // Applies what the WhatsApp assistant understood from the customer's message.
+  applyChatTurn(lead, turn) {
+    if (turn.cart) lead.items = this.toItems(turn.cart);
+    const d = turn.delivery ?? {};
+    if (d.zone || d.address || d.slot) {
+      lead.delivery ??= { zone: null, address: null, slot: null, fee: null };
+      if (d.zone) {
+        const zone = this.deliveryZones().find((z) => normalize(z.name) === normalize(d.zone));
+        if (zone) Object.assign(lead.delivery, { zone: zone.name, fee: zone.fee });
+      }
+      if (d.address) lead.delivery.address = String(d.address).slice(0, 200);
+      if (d.slot) lead.delivery.slot = String(d.slot).slice(0, 100);
+    }
+    if (turn.cancel && lead.status !== "paye" && lead.status !== "livre") lead.status = "annule";
+    else if (lead.status === "nouveau") lead.status = "contacte";
+    this.recalc(lead);
+    this.save();
+    return lead;
+  }
+
+  // A new identifier per payment request, so a changed order gets a new link.
+  startPayment(lead, payments) {
+    const n = (lead.payment?.n ?? 0) + 1;
+    const identifier = `${lead.code}-${lead.id.slice(0, 8)}-${n}`;
+    const url = payments.link({ identifier, amount: lead.amountDue, description: `Commande ${lead.code}` });
+    lead.payment = { n, identifier, url, amount: lead.amountDue, at: Date.now() };
+    this.save();
+    return lead.payment;
+  }
+
+  markPaid(identifier) {
+    const lead = this.data.leads.find((l) => l.payment?.identifier === identifier);
+    if (!lead) return null;
+    if (lead.status !== "livre") lead.status = "paye";
+    lead.paidAt ??= Date.now();
+    this.save();
+    return lead;
+  }
+
+  // Paid orders to deliver, and the ones delivered recently.
+  listDeliveries() {
+    return this.data.leads.filter((l) => l.status === "paye" || l.status === "livre").sort((a, b) => (a.paidAt ?? 0) - (b.paidAt ?? 0));
   }
 
   updateLead(id, { status }) {

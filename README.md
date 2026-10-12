@@ -30,6 +30,20 @@ Ohne `ANTHROPIC_API_KEY` läuft TackTack mit einer einfachen Erkennung über Sch
 
 Ohne `ANTHROPIC_API_KEY` funktionieren Warenkorb, Code und Nachrichten mit den Schlüsselwörtern, aber ohne Zusammenhang und ohne KI-Antworten auf Fragen.
 
+## Stand: Schritt 4 – Verkauf über WhatsApp bis zur Lieferung
+
+- Der Kunde schreibt seinen Bestellcode auf WhatsApp. Die KI-Assistentin findet die Bestellung, bestätigt sie, beantwortet Fragen, schlägt höchstens einmal einen passenden Artikel vor und fragt Quartier, Adresse und Wunschzeit ab. Der Kunde kann seinen Warenkorb im Chat noch ändern.
+- Ist alles klar, schickt sie automatisch den **Zahlungslink** (Flooz oder T-Money über PayGate Global) mit dem Betrag inklusive Liefergebühr der Zone.
+- Nach der Zahlung steht die Bestellung auf „Payé“, der Kunde bekommt eine Bestätigung, und die Bestellung erscheint im neuen Reiter **Livraisons** mit Adresse, Zeit und Telefonnummer. „Marquer livré“ schließt sie ab.
+- Zonen und Gebühren stehen unter **Mes produits → WhatsApp et paiement** (eine Zeile pro Quartier, z. B. `Bè = 1000`).
+- **Testen ohne Zugänge:** Auf jeder Kundenkarte gibt es „Conversation WhatsApp“, wo man als Kunde schreibt. Ohne PayGate-Konto führt der Zahlungslink auf eine Demo-Seite mit „Payer (démo)“.
+- Ohne `ANTHROPIC_API_KEY` führt ein einfacher Ablauf durch das Gespräch (Bestellung bestätigen, Quartier fragen, Zahlungslink).
+
+**Für den echten Betrieb** (Werte in `.env`):
+- `PUBLIC_URL`: öffentliche https-Adresse von TackTack (auf dem PC z. B. über einen Tunnel wie Cloudflare Tunnel).
+- WhatsApp Business Platform von Meta: `WHATSAPP_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_VERIFY_TOKEN`, `WHATSAPP_APP_SECRET`. Webhook-Adresse bei Meta: `PUBLIC_URL/webhook/whatsapp`.
+- PayGate Global: `PAYGATE_TOKEN`. Rückmelde-Adresse bei PayGate: `PUBLIC_URL/api/payments/paygate`. TackTack prüft jede Rückmeldung noch einmal bei PayGate.
+
 ## Starten
 
 **Windows:** Doppelklick auf `start-windows.bat`. Beim ersten Start installiert sie alles Nötige und öffnet danach den Browser. Voraussetzung ist Node.js (LTS) von https://nodejs.org.
@@ -60,5 +74,5 @@ npm test
 ## Nächste Schritte
 
 2. Verkäufer-Web-App (Anmeldung, Produkte, Übersicht der Käufer)
-3. WhatsApp Business automatisch anbinden (Nachrichten ohne Kopieren senden) und echte Zahlungslinks für Flooz und T-Money, z. B. über PayGate Global
+3. Schnittstelle zu einer Liefer-App
 4. Fertig für mehrere Verkäufer

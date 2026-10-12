@@ -12,6 +12,7 @@
     <nav class="tabs" role="tablist">
       <button type="button" class="tab" data-tab="live" role="tab">Mon live</button>
       <button type="button" class="tab" data-tab="products" role="tab">Mes produits</button>
+      <button type="button" class="tab" data-tab="deliveries" role="tab">Livraisons</button>
     </nav>
     <span id="ai-badge" class="badge">…</span>
   </header>
@@ -73,6 +74,9 @@
             <input id="shop-tmoney" type="tel" placeholder="90 00 00 00">
           </label>
         </div>
+        <label>Zones de livraison (une par ligne : quartier = frais en F)
+          <textarea id="shop-zones" rows="4" placeholder="Bè = 1000&#10;Tokoin = 1000&#10;Agoè = 1500"></textarea>
+        </label>
         <div class="row">
           <button type="submit">Enregistrer</button>
         </div>
@@ -108,6 +112,15 @@
       <h2>Mes produits</h2>
       <ul id="product-list" class="list products"></ul>
       <p class="empty" id="product-empty">Aucun produit. Ajoute ce que tu veux vendre pendant ton live.</p>
+    </section>
+  </main>
+
+  <main id="tab-deliveries" hidden>
+    <section class="card">
+      <h2>Livraisons</h2>
+      <p class="hint">Les commandes payées, avec le quartier, l'adresse et le moment donnés au client sur WhatsApp.</p>
+      <ul id="delivery-list" class="list"></ul>
+      <p class="empty" id="delivery-empty">Aucune commande payée pour l'instant.</p>
     </section>
   </main>
 
