@@ -12,7 +12,18 @@ Live-Verkauf auf TikTok mit KI: TackTack liest die Kommentare eines laufenden Ti
 
 Ohne `ANTHROPIC_API_KEY` läuft TackTack mit einer einfachen Erkennung über Schlüsselwörter. Mit Schlüssel analysiert Claude die Kommentare (mehrere Kommentare pro Anfrage, damit es auch bei vollen Lives günstig bleibt).
 
+## Stand: Schritt 2 – Verkäufer-Dashboard
+
+- Reiter **Mes produits**: Produkte mit Preis in F CFA und optionalem Bestand anlegen, bearbeiten, löschen und für das heutige Live an- oder abschalten. Die aktiven Produkte gehen automatisch als „Produits du jour“ an die KI.
+- Reiter **Mon live**: pro Kunde eine Karte mit Absicht, erkanntem Produkt, Menge und Betrag. Der Verkäufer setzt den Status auf Nouveau, Contacté, Payé oder Annulé.
+- Kennzahl **ventes prévues**: Summe der Kaufwünsche (ohne Annulé).
+- Produkte und Kunden bleiben nach einem Neustart erhalten (Datei `data/tacktack.json`, änderbar über `DATA_FILE`). Noch ohne Anmeldung, ein Verkäufer pro Server; mehrere Verkäufer kommen mit Schritt 4.
+
 ## Starten
+
+**Windows:** Doppelklick auf `start-windows.bat`. Beim ersten Start installiert sie alles Nötige und öffnet danach den Browser. Voraussetzung ist Node.js (LTS) von https://nodejs.org.
+
+**Kommandozeile:**
 
 Voraussetzung: Node.js 22 oder neuer.
 
