@@ -19,6 +19,31 @@ Ohne `ANTHROPIC_API_KEY` läuft TackTack mit einer einfachen Erkennung über Sch
 - Kennzahl **ventes prévues**: Summe der Kaufwünsche (ohne Annulé).
 - Produkte und Kunden bleiben nach einem Neustart erhalten (Datei `data/tacktack.json`, änderbar über `DATA_FILE`). Noch ohne Anmeldung, ein Verkäufer pro Server; mehrere Verkäufer kommen mit Schritt 4.
 
+## Stand: Schritt 3 – KI-Verkaufsassistentin
+
+- Die KI liest die Kommentare mit Zusammenhang: Sie bekommt die Produkte mit Preis und Restbestand, den aktuellen Warenkorb der Kunden und die letzten Kommentare im Live. So versteht sie „moi aussi“, „plutôt le rouge“, „ajoute un savon“ oder „finalement non“.
+- Pro Kunde ein **Warenkorb** mit mehreren Artikeln, Farbe/Größe und Gesamtbetrag. Ausverkaufte Artikel nimmt die KI nicht mehr an; reservierte Mengen zählen gegen den Bestand.
+- Jeder Kunde bekommt einen **Bestellcode** (z. B. TT4821). Er schreibt ihn dem Verkäufer auf WhatsApp; so schreibt der Kunde zuerst, wie WhatsApp es verlangt.
+- **Antwort für das Live**: Bestätigung mit Betrag, WhatsApp-Nummer und Code, oder die Antwort der KI auf Fragen (Preis, Farbe, Lieferung). Ein Knopf kopiert sie.
+- **WhatsApp-Nachricht** mit Bestellung, Gesamtbetrag und den Flooz- und T-Money-Nummern des Verkäufers. Schreibt ein Kunde seine Nummer in einen Kommentar, öffnet ein Knopf direkt den WhatsApp-Chat mit der Nachricht.
+- Reiter **Mes produits**: neuer Bereich „WhatsApp et paiement“ für Boutique-Name, WhatsApp-, Flooz- und T-Money-Nummer.
+
+Ohne `ANTHROPIC_API_KEY` funktionieren Warenkorb, Code und Nachrichten mit den Schlüsselwörtern, aber ohne Zusammenhang und ohne KI-Antworten auf Fragen.
+
+## Stand: Schritt 4 – Verkauf über WhatsApp bis zur Lieferung
+
+- Der Kunde schreibt seinen Bestellcode auf WhatsApp. Die KI-Assistentin findet die Bestellung, bestätigt sie, beantwortet Fragen, schlägt höchstens einmal einen passenden Artikel vor und fragt Quartier, Adresse und Wunschzeit ab. Der Kunde kann seinen Warenkorb im Chat noch ändern.
+- Ist alles klar, schickt sie automatisch den **Zahlungslink** (Flooz oder T-Money über PayGate Global) mit dem Betrag inklusive Liefergebühr der Zone.
+- Nach der Zahlung steht die Bestellung auf „Payé“, der Kunde bekommt eine Bestätigung, und die Bestellung erscheint im neuen Reiter **Livraisons** mit Adresse, Zeit und Telefonnummer. „Marquer livré“ schließt sie ab.
+- Zonen und Gebühren stehen unter **Mes produits → WhatsApp et paiement** (eine Zeile pro Quartier, z. B. `Bè = 1000`).
+- **Testen ohne Zugänge:** Auf jeder Kundenkarte gibt es „Conversation WhatsApp“, wo man als Kunde schreibt. Ohne PayGate-Konto führt der Zahlungslink auf eine Demo-Seite mit „Payer (démo)“.
+- Ohne `ANTHROPIC_API_KEY` führt ein einfacher Ablauf durch das Gespräch (Bestellung bestätigen, Quartier fragen, Zahlungslink).
+
+**Für den echten Betrieb** (Werte in `.env`):
+- `PUBLIC_URL`: öffentliche https-Adresse von TackTack (auf dem PC z. B. über einen Tunnel wie Cloudflare Tunnel).
+- WhatsApp Business Platform von Meta: `WHATSAPP_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_VERIFY_TOKEN`, `WHATSAPP_APP_SECRET`. Webhook-Adresse bei Meta: `PUBLIC_URL/webhook/whatsapp`.
+- PayGate Global: `PAYGATE_TOKEN`. Rückmelde-Adresse bei PayGate: `PUBLIC_URL/api/payments/paygate`. TackTack prüft jede Rückmeldung noch einmal bei PayGate.
+
 ## Starten
 
 **Windows:** Doppelklick auf `start-windows.bat`. Beim ersten Start installiert sie alles Nötige und öffnet danach den Browser. Voraussetzung ist Node.js (LTS) von https://nodejs.org.
@@ -49,5 +74,5 @@ npm test
 ## Nächste Schritte
 
 2. Verkäufer-Web-App (Anmeldung, Produkte, Übersicht der Käufer)
-3. Kaufabschluss über WhatsApp mit Zahlungslink für Flooz und T-Money
+3. Schnittstelle zu einer Liefer-App
 4. Fertig für mehrere Verkäufer

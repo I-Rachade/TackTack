@@ -14,7 +14,7 @@ test("products are validated, saved to disk and turned into the AI catalog", () 
   assert.throws(() => store.addProduct({ name: "Savon", price: -1 }), /prix/);
 
   store.updateProduct(sac.id, { active: false });
-  assert.equal(store.catalogText(), "Pagne wax 6 yards - 12 000 F (stock : 5)");
+  assert.deepEqual(store.catalogForAi().map((p) => [p.nom, p.prix, p.stock_restant]), [["Pagne wax 6 yards", 12000, 5]]);
 
   const reloaded = new Store({ file });
   assert.equal(reloaded.listProducts().length, 2);
@@ -31,21 +31,40 @@ test("AI product names are matched to the seller's products", () => {
   assert.equal(store.matchProduct("chaussures"), null);
 });
 
-test("one lead per customer, with price and total from the product list", () => {
+test("one lead per customer, with a cart priced from the product list", () => {
   const store = new Store();
-  store.addProduct({ name: "Pagne wax 6 yards", price: 12000 });
+  const pagne = store.addProduct({ name: "Pagne wax 6 yards", price: 12000, stock: 5 });
+  const savon = store.addProduct({ name: "Savon karité", price: 500 });
   store.startLive();
   const c = (text) => ({ id: text, user: "edem228", text, at: 1 });
+  const ai = (intent, cart, extra = {}) => ({ intent, cart, phone: null, reply: null, ...extra });
 
-  store.recordIntent(c("c'est combien le pagne ?"), { intent: "question_prix", product: "pagne", quantity: null });
-  const lead = store.recordIntent(c("je prends 2 pagnes"), { intent: "achat", product: "pagnes wax", quantity: 2 });
-  store.recordIntent(c("livraison à Bè ?"), { intent: "question_livraison", product: null, quantity: null });
+  store.recordIntent(c("c'est combien le pagne ?"), ai("question_prix", undefined, { reply: "@edem228 12 000 F" }));
+  let lead = store.recordIntent(c("je prends 2 pagnes"), ai("achat", [{ product_id: pagne.id, product: "pagne", quantity: 2, variant: null }]));
+  assert.equal(lead.reply, null);
+  lead = store.recordIntent(
+    c("ajoute 3 savons, mon numéro 90 12 34 56"),
+    ai("achat", [
+      { product_id: pagne.id, product: "pagne", quantity: 2, variant: null },
+      { product_id: null, product: "savons", quantity: 3, variant: null },
+    ], { phone: "90 12 34 56" }),
+  );
+  store.recordIntent(c("livraison à Bè ?"), ai("question_livraison", undefined));
 
   assert.equal(store.listLeads().length, 1);
   assert.equal(lead.intent, "achat");
-  assert.equal(lead.product, "Pagne wax 6 yards");
-  assert.equal(lead.total, 24000);
-  assert.equal(lead.comments.length, 3);
+  assert.match(lead.code, /^TT\d{4}$/);
+  assert.deepEqual(lead.items.map((i) => [i.name, i.quantity, i.unitPrice]), [["Pagne wax 6 yards", 2, 12000], ["Savon karité", 3, 500]]);
+  assert.equal(lead.items[1].productId, savon.id);
+  assert.equal(lead.total, 25500);
+  assert.equal(lead.phone, "90 12 34 56");
+  assert.equal(lead.comments.length, 4);
+  assert.equal(store.catalogForAi()[0].stock_restant, 3);
+  assert.deepEqual(store.customersForAi(["edem228"])[0].panier.map((p) => p.quantite), [2, 3]);
+
+  store.recordIntent(c("finalement non"), ai("annulation", undefined));
+  assert.equal(lead.status, "annule");
+  assert.equal(store.catalogForAi()[0].stock_restant, 5);
 
   store.updateLead(lead.id, { status: "paye" });
   assert.equal(store.listLeads()[0].status, "paye");
@@ -55,12 +74,20 @@ test("one lead per customer, with price and total from the product list", () => 
   assert.equal(store.listLeads().length, 0);
 });
 
+test("settings keep WhatsApp and payment numbers", () => {
+  const store = new Store();
+  store.updateSettings({ shopName: "Boutique Ama", whatsapp: "90 00 00 00", flooz: "+228 99 00 00 00" });
+  assert.equal(store.getSettings().flooz, "+228 99 00 00 00");
+  assert.equal(store.getSettings().tmoney, "");
+  assert.throws(() => store.updateSettings({ whatsapp: "abc" }), /Numéro/);
+});
+
 test("in keyword mode the product is found in the comment text", () => {
   const store = new Store();
   store.addProduct({ name: "Sac rouge", price: 7500 });
   store.startLive();
-  const lead = store.recordIntent({ id: "1", user: "akpene", text: "je commande 1 sac rouge" }, { intent: "achat", product: null, quantity: null });
-  assert.equal(lead.product, "Sac rouge");
+  const lead = store.recordIntent({ id: "1", user: "akpene", text: "je commande 1 sac rouge" }, { intent: "achat" });
+  assert.equal(lead.items[0].name, "Sac rouge");
   assert.equal(lead.total, 7500);
 });
 
@@ -69,7 +96,7 @@ test("in keyword mode the quantity is read before the product name", () => {
   store.addProduct({ name: "Pagne wax 6 yards", price: 12000 });
   store.addProduct({ name: "Chaussures", price: 9000 });
   store.startLive();
-  const kw = { intent: "achat", product: null, quantity: null };
+  const kw = { intent: "achat" };
   assert.equal(store.recordIntent({ id: "1", user: "a", text: "Je prends 2 pagnes wax svp" }, kw).total, 24000);
   assert.equal(store.recordIntent({ id: "2", user: "b", text: "moi je veux les chaussures taille 42" }, kw).total, 9000);
 });

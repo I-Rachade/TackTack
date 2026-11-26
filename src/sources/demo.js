@@ -17,6 +17,7 @@ const SAMPLE = [
   ["abla.tg", "ça dure combien de temps la livraison ?"],
   ["selom", "Bravo pour le live"],
   ["enyonam", "Réserve-moi le grand modèle stp"],
+  ["kafui", "Je prends 1 pagne, mon WhatsApp 90 12 34 56"],
 ];
 
 export class DemoSource extends EventEmitter {
