@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TackTack</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <h1>TackTack</h1>
+    <span id="ai-badge" class="badge">…</span>
+  </header>
+
+  <main>
+    <section class="card" id="setup">
+      <h2>Connecter mon live</h2>
+      <p class="hint">Lance ton live dans l'application TikTok, puis entre ton nom d'utilisateur ici.</p>
+      <form id="live-form">
+        <label>Nom d'utilisateur TikTok
+          <input id="username" placeholder="@maboutique" autocomplete="off">
+        </label>
+        <label>Produits du jour (optionnel)
+          <textarea id="catalog" rows="4" placeholder="Sac noir - 7 500 F&#10;Pagne wax 6 yards - 12 000 F&#10;Savon karité - 500 F"></textarea>
+        </label>
+        <div class="row">
+          <button type="submit" id="connect">Connecter</button>
+          <button type="button" id="demo" class="secondary">Essayer en démo</button>
+          <button type="button" id="stop" class="danger" hidden>Arrêter</button>
+        </div>
+      </form>
+      <p id="status" class="status"></p>
+    </section>
+
+    <section class="stats">
+      <div><strong id="viewers">–</strong><span>spectateurs</span></div>
+      <div><strong id="count">0</strong><span>commentaires</span></div>
+      <div><strong id="buyers">0</strong><span>clients intéressés</span></div>
+    </section>
+
+    <section class="columns">
+      <div class="card">
+        <h2>Clients intéressés</h2>
+        <ul id="buyer-list" class="list"></ul>
+        <p class="empty" id="buyer-empty">Personne pour l'instant.</p>
+      </div>
+      <div class="card">
+        <h2>Tous les commentaires</h2>
+        <ul id="comment-list" class="list"></ul>
+      </div>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
