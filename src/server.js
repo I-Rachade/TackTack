@@ -1,4 +1,5 @@
 import express from "express";
+import crypto from "node:crypto";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { IntentClassifier, BUYING_INTENTS } from "./intent.js";
@@ -11,6 +12,24 @@ import { Payments } from "./payments.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
+// Pages that customers, Meta and PayGate must reach without the seller's password.
+const PUBLIC_PATHS = [/^\/webhook\/whatsapp$/, /^\/api\/payments\/paygate$/, /^\/payer\/[^/]+$/, /^\/merci$/, /^\/style\.css$/];
+
+// Protects the seller dashboard and its API with one password (HTTP Basic, any user name).
+export function requirePassword(password) {
+  const digest = (t) => crypto.createHash("sha256").update(String(t)).digest();
+  const expected = digest(password);
+  return (req, res, next) => {
+    if (PUBLIC_PATHS.some((p) => p.test(req.path))) return next();
+    const [scheme, encoded] = (req.get("authorization") ?? "").split(" ");
+    const pair = scheme === "Basic" && encoded ? Buffer.from(encoded, "base64").toString("utf8") : "";
+    const given = pair.includes(":") ? pair.slice(pair.indexOf(":") + 1) : null;
+    if (given != null && crypto.timingSafeEqual(digest(given), expected)) return next();
+    res.set("WWW-Authenticate", 'Basic realm="TackTack", charset="UTF-8"');
+    res.status(401).send("Mot de passe requis.");
+  };
+}
+
 // Phase 1: one live session per server, pushed to the browser over Server-Sent Events.
 export function createApp({
   apiKey,
@@ -22,8 +41,10 @@ export function createApp({
   store = new Store(),
   whatsapp = new WhatsApp(),
   payments = new Payments(),
+  dashboardPassword,
 } = {}) {
   const app = express();
+  if (dashboardPassword) app.use(requirePassword(dashboardPassword));
   // Keeps the raw body so WhatsApp webhook signatures can be checked.
   app.use(express.json({ verify: (req, res, buf) => (req.rawBody = buf) }));
   app.use(express.urlencoded({ extended: false }));
