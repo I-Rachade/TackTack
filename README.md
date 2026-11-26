@@ -40,6 +40,7 @@ Ohne `ANTHROPIC_API_KEY` funktionieren Warenkorb, Code und Nachrichten mit den S
 - Ohne `ANTHROPIC_API_KEY` führt ein einfacher Ablauf durch das Gespräch (Bestellung bestätigen, Quartier fragen, Zahlungslink).
 
 **Für den echten Betrieb** (Werte in `.env`):
+- `DASHBOARD_PASSWORD`: Passwort für das Verkäufer-Dashboard (Benutzername beliebig). Pflicht, sobald `PUBLIC_URL` gesetzt ist – sonst startet TackTack nicht. Webhooks, Zahlungsseite und `/merci` bleiben ohne Passwort erreichbar.
 - `PUBLIC_URL`: öffentliche https-Adresse von TackTack (auf dem PC z. B. über einen Tunnel wie Cloudflare Tunnel).
 - WhatsApp Business Platform von Meta: `WHATSAPP_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_VERIFY_TOKEN`, `WHATSAPP_APP_SECRET`. Webhook-Adresse bei Meta: `PUBLIC_URL/webhook/whatsapp`.
 - PayGate Global: `PAYGATE_TOKEN`. Rückmelde-Adresse bei PayGate: `PUBLIC_URL/api/payments/paygate`. TackTack prüft jede Rückmeldung noch einmal bei PayGate.
