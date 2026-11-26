@@ -3,7 +3,8 @@
   "version": "1.0.0",
   "scripts": {
     "test": "node --test",
-    "start": "node --env-file-if-exists=.env src/index.js"
+    "start": "node --env-file-if-exists=.env src/index.js",
+    "build": "npx -y esbuild@0.24.0 src/index.js --bundle --platform=node --format=esm --target=node22 --outfile=dist/tacktack.mjs \"--banner:js=import{createRequire as __cr}from'module';const require=__cr(import.meta.url);\""
   },
   "type": "module",
   "dependencies": {

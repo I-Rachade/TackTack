@@ -4,11 +4,12 @@ import { fileURLToPath } from "node:url";
 import { IntentClassifier, BUYING_INTENTS } from "./intent.js";
 import { TikTokSource } from "./sources/tiktok.js";
 import { DemoSource } from "./sources/demo.js";
+import { Store, LEAD_STATUSES } from "./store.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
 // Phase 1: one live session per server, pushed to the browser over Server-Sent Events.
-export function createApp({ apiKey, model, eulerApiKey, classifierClient, demoIntervalMs } = {}) {
+export function createApp({ apiKey, model, eulerApiKey, classifierClient, demoIntervalMs, store = new Store() } = {}) {
   const app = express();
   app.use(express.json());
   app.use(express.static(path.join(here, "..", "public")));
@@ -19,14 +20,29 @@ export function createApp({ apiKey, model, eulerApiKey, classifierClient, demoIn
     for (const res of clients) res.write(payload);
   };
 
-  const stats = { comments: 0, buyers: 0 };
+  const stats = { comments: 0, buyers: 0, revenue: 0 };
+  const refreshStats = () => {
+    const leads = store.listLeads();
+    stats.buyers = leads.length;
+    stats.revenue = leads
+      .filter((l) => l.intent === "achat" && l.status !== "annule" && l.total != null)
+      .reduce((sum, l) => sum + l.total, 0);
+  };
+  refreshStats();
+
+  const pending = new Map(); // comment id -> comment, until the AI has classified it
   const classifier = new IntentClassifier({
     apiKey,
     model,
     client: classifierClient,
     onResult: (r) => {
-      if (BUYING_INTENTS.has(r.intent)) stats.buyers += 1;
+      const comment = pending.get(r.id);
+      pending.delete(r.id);
       broadcast("intent", r);
+      if (comment && BUYING_INTENTS.has(r.intent)) {
+        broadcast("lead", store.recordIntent(comment, r));
+        refreshStats();
+      }
       broadcast("stats", stats);
     },
     onError: (err) => broadcast("status", { state: "warning", message: `IA indisponible, détection par mots-clés : ${err.message}` }),
@@ -52,12 +68,15 @@ export function createApp({ apiKey, model, eulerApiKey, classifierClient, demoIn
     if (mode !== "demo" && !username?.trim()) return res.status(400).json({ error: "Nom d'utilisateur TikTok manquant." });
 
     stopSource();
+    pending.clear();
+    store.startLive();
     stats.comments = 0;
-    stats.buyers = 0;
-    classifier.setCatalog(catalog);
+    refreshStats();
+    classifier.setCatalog(catalog?.trim() ? catalog : store.catalogText());
     source = mode === "demo" ? new DemoSource({ intervalMs: demoIntervalMs }) : new TikTokSource(username, { eulerApiKey });
     source.on("comment", (c) => {
       stats.comments += 1;
+      pending.set(c.id, c);
       broadcast("comment", c);
       classifier.add(c);
     });
@@ -80,6 +99,56 @@ export function createApp({ apiKey, model, eulerApiKey, classifierClient, demoIn
     stopSource();
     broadcast("status", { state: "stopped", message: "Live arrêté." });
     res.json({ ok: true });
+  });
+
+  // --- Products (prepared before the live) ---------------------------------
+
+  const fail = (res, err) => res.status(400).json({ error: err.message });
+
+  app.get("/api/products", (req, res) => res.json(store.listProducts()));
+
+  app.post("/api/products", (req, res) => {
+    try {
+      const product = store.addProduct(req.body ?? {});
+      if (source) classifier.setCatalog(store.catalogText());
+      res.status(201).json(product);
+    } catch (err) {
+      fail(res, err);
+    }
+  });
+
+  app.patch("/api/products/:id", (req, res) => {
+    try {
+      const product = store.updateProduct(req.params.id, req.body ?? {});
+      if (!product) return res.status(404).json({ error: "Produit introuvable." });
+      if (source) classifier.setCatalog(store.catalogText());
+      res.json(product);
+    } catch (err) {
+      fail(res, err);
+    }
+  });
+
+  app.delete("/api/products/:id", (req, res) => {
+    if (!store.deleteProduct(req.params.id)) return res.status(404).json({ error: "Produit introuvable." });
+    if (source) classifier.setCatalog(store.catalogText());
+    res.json({ ok: true });
+  });
+
+  // --- Leads (interested customers of the current or last live) -------------
+
+  app.get("/api/leads", (req, res) => res.json({ leads: store.listLeads(), statuses: LEAD_STATUSES }));
+
+  app.patch("/api/leads/:id", (req, res) => {
+    try {
+      const lead = store.updateLead(req.params.id, req.body ?? {});
+      if (!lead) return res.status(404).json({ error: "Client introuvable." });
+      refreshStats();
+      broadcast("lead", lead);
+      broadcast("stats", stats);
+      res.json(lead);
+    } catch (err) {
+      fail(res, err);
+    }
   });
 
   return app;

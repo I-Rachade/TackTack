@@ -9,10 +9,14 @@
 <body>
   <header>
     <h1>TackTack</h1>
+    <nav class="tabs" role="tablist">
+      <button type="button" class="tab" data-tab="live" role="tab">Mon live</button>
+      <button type="button" class="tab" data-tab="products" role="tab">Mes produits</button>
+    </nav>
     <span id="ai-badge" class="badge">…</span>
   </header>
 
-  <main>
+  <main id="tab-live">
     <section class="card" id="setup">
       <h2>Connecter mon live</h2>
       <p class="hint">Lance ton live dans l'application TikTok, puis entre ton nom d'utilisateur ici.</p>
@@ -20,9 +24,7 @@
         <label>Nom d'utilisateur TikTok
           <input id="username" placeholder="@maboutique" autocomplete="off">
         </label>
-        <label>Produits du jour (optionnel)
-          <textarea id="catalog" rows="4" placeholder="Sac noir - 7 500 F&#10;Pagne wax 6 yards - 12 000 F&#10;Savon karité - 500 F"></textarea>
-        </label>
+        <p class="catalog-summary" id="catalog-summary"></p>
         <div class="row">
           <button type="submit" id="connect">Connecter</button>
           <button type="button" id="demo" class="secondary">Essayer en démo</button>
@@ -36,18 +38,51 @@
       <div><strong id="viewers">–</strong><span>spectateurs</span></div>
       <div><strong id="count">0</strong><span>commentaires</span></div>
       <div><strong id="buyers">0</strong><span>clients intéressés</span></div>
+      <div><strong id="revenue">0 F</strong><span>ventes prévues</span></div>
     </section>
 
     <section class="columns">
       <div class="card">
         <h2>Clients intéressés</h2>
-        <ul id="buyer-list" class="list"></ul>
-        <p class="empty" id="buyer-empty">Personne pour l'instant.</p>
+        <ul id="lead-list" class="list"></ul>
+        <p class="empty" id="lead-empty">Personne pour l'instant.</p>
       </div>
       <div class="card">
         <h2>Tous les commentaires</h2>
         <ul id="comment-list" class="list"></ul>
       </div>
+    </section>
+  </main>
+
+  <main id="tab-products" hidden>
+    <section class="card">
+      <h2 id="product-form-title">Ajouter un produit</h2>
+      <p class="hint">Ce que tu vends aujourd'hui. L'IA s'en sert pour reconnaître l'article et le prix dans les commentaires.</p>
+      <form id="product-form">
+        <input type="hidden" id="product-id">
+        <label>Nom
+          <input id="product-name" placeholder="Pagne wax 6 yards" required maxlength="120">
+        </label>
+        <div class="row fields">
+          <label>Prix (F CFA)
+            <input id="product-price" type="number" inputmode="numeric" min="0" step="1" placeholder="12000" required>
+          </label>
+          <label>Stock (optionnel)
+            <input id="product-stock" type="number" inputmode="numeric" min="0" step="1" placeholder="10">
+          </label>
+        </div>
+        <div class="row">
+          <button type="submit" id="product-save">Ajouter</button>
+          <button type="button" id="product-cancel" class="secondary" hidden>Annuler</button>
+        </div>
+        <p id="product-error" class="status error"></p>
+      </form>
+    </section>
+
+    <section class="card">
+      <h2>Mes produits</h2>
+      <ul id="product-list" class="list products"></ul>
+      <p class="empty" id="product-empty">Aucun produit. Ajoute ce que tu veux vendre pendant ton live.</p>
     </section>
   </main>
 

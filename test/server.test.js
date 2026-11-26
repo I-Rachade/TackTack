@@ -46,3 +46,30 @@ test("connecting to TikTok without a username is rejected", async () => {
     server.close();
   }
 });
+
+test("products feed the live and buyers become leads with a total", async () => {
+  const server = createApp({ demoIntervalMs: 10 }).listen(0);
+  const base = `http://localhost:${server.address().port}`;
+  const json = (method, url, body) =>
+    fetch(`${base}${url}`, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  try {
+    assert.equal((await json("POST", "/api/products", { name: "Sac rouge", price: 7500 })).status, 201);
+    assert.equal((await json("POST", "/api/products", { name: "Sac", price: "abc" })).status, 400);
+
+    await json("POST", "/api/live", { mode: "demo" });
+    let leads = [];
+    while (!leads.some((l) => l.user === "akpene")) {
+      await new Promise((r) => setTimeout(r, 20));
+      leads = (await (await fetch(`${base}/api/leads`)).json()).leads;
+    }
+    await fetch(`${base}/api/live`, { method: "DELETE" });
+
+    assert.ok(leads.some((l) => l.user === "edem228" && l.intent === "achat"));
+    assert.ok(!leads.some((l) => l.user === "afi_b"));
+    const lead = leads.find((l) => l.user === "kossi.tg");
+    const res = await json("PATCH", `/api/leads/${lead.id}`, { status: "contacte" });
+    assert.equal((await res.json()).status, "contacte");
+  } finally {
+    server.close();
+  }
+});
